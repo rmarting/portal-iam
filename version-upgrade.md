@@ -5,14 +5,16 @@ helm dependency update
 helm install centralidp -f ../../consortia/environments/centralidp/values-local.yaml .
 helm install sharedidp -f ../../consortia/environments/sharedidp/values-local.yaml .
 helm install portal -f ../../consortia/environments/values-local.yaml .
-helm upgrade portal -f ../../consortia/environments/values-local.yaml .
-
 
 minikube ip
 kubectl get ing
 minikube service list
 kubectl get pods -n ingress-nginx
 adjust hosts file
+
+Dump:
+psql -h centralidp-postgresql-primary -d iamcentralidp -U postgres -W
+
 
 https://github.com/bitnami/charts/issues/8025
 https://github.com/bitnami/charts/issues/14926
@@ -23,6 +25,8 @@ https://github.com/bitnami/charts/issues/14926
     - '-c'
     args:
     - sleep infinity
+
+unset POSTGRES_DATABASE
 
 # lets work in /tmp
 cd /tmp/
@@ -40,15 +44,17 @@ perl -e 'use IO::Socket::INET; my $s = IO::Socket::INET->new(PeerAddr=>"download
 tar --extract --directory /bitnami/postgresql/oldbin/ --file postgresql-14.2.0-0-linux-amd64-debian-11.tar.gz --strip-components=4 postgresql-14.2.0-0-linux-amd64-debian-11/files/postgresql/bin
 
 ## Works
-perl -e 'use IO::Socket::INET; my $s = IO::Socket::INET->new(PeerAddr=>"downloads.bitnami.com", PeerPort=>80, Proto=>"tcp"); print $s "GET /files/stacksmith/postgresql-14.2.0-0-linux-amd64-debian-11.tar.gz HTTP/1.0\r\nHost: downloads.bitnami.com\r\n\r\n"; while(<$s>) { last if $_ eq "\r\n" }; open(my $f, ">", "postgresql-14.2.0-0-linux-amd64-debian-11.tar.gz") or die "Could not open file: $!"; print $f $_ while <$s>; close $f; close $s;' tar --extract --file postgresql-14.2.0-0-linux-amd64-debian-11.tar.gz; /opt/bitnami/scripts/postgresql/entrypoint.sh mv postgresql-14.2.0-linux-amd64-debian-11/files/postgresql/bin /bitnami/postgresql/oldbin
+perl -e 'use IO::Socket::INET; my $s = IO::Socket::INET->new(PeerAddr=>"downloads.bitnami.com", PeerPort=>80, Proto=>"tcp"); print $s "GET /files/stacksmith/postgresql-14.2.0-0-linux-amd64-debian-11.tar.gz HTTP/1.0\r\nHost: downloads.bitnami.com\r\n\r\n"; while(<$s>) { last if $_ eq "\r\n" }; open(my $f, ">", "postgresql-14.2.0-0-linux-amd64-debian-11.tar.gz") or die "Could not open file: $!"; print $f $_ while <$s>; close $f; close $s;' tar --extract --file postgresql-14.2.0-0-linux-amd64-debian-11.tar.gz;
 
-psql -h centralidp-postgresql-primary -d iamcentralidp -U postgres -W
+tar --extract --directory /bitnami/postgresql/oldbin/ --file postgresql-14.2.0-0-linux-amd64-debian-11.tar.gz --strip-components=4 postgresql-14.2.0-linux-amd64-debian-11/files/postgresql/bin
 
-
-/opt/bitnami/scripts/postgresql/entrypoint.sh mv /tmp/postgresql-14.2.0-0-linux-amd64-debian-11/files/postgresql/bin /bitnami/postgresql/oldbin
+# copy old bin
+/opt/bitnami/scripts/postgresql/entrypoint.sh mv postgresql-14.2.0-linux-amd64-debian-11/files/postgresql/bin /bitnami/postgresql/oldbin
 
 # copy old datadir
 /opt/bitnami/scripts/postgresql/entrypoint.sh mv /bitnami/postgresql/data /bitnami/postgresql/olddata
+cp /bitnami/postgresql/data/postgresql.auto.conf /bitnami/postgresql/olddata/postgresql.conf
+echo "local all postgres trust" > /bitnami/postgresql/olddata/pg_hba.conf
 
 # Initialize new cluster
 /opt/bitnami/scripts/postgresql/entrypoint.sh /opt/bitnami/scripts/postgresql/setup.sh
@@ -59,13 +65,11 @@ psql -h centralidp-postgresql-primary -d iamcentralidp -U postgres -W
 cp /bitnami/postgresql/data/postgresql.auto.conf /bitnami/postgresql/data/postgresql.conf
 echo "local all postgres trust" > /bitnami/postgresql/data/pg_hba.conf
 
-cp /bitnami/postgresql/olddata/postgresql.auto.conf /bitnami/postgresql/olddata/postgresql.conf
-
 # Check consistency fist
 # If it says the versions are compatible, run the same command without -c and it will copy the data
-/opt/bitnami/scripts/postgresql/entrypoint.sh pg_upgrade  -b /bitnami/postgresql/oldbin -B /opt/bitnami/postgresql/bin -d /bitnami/postgresql/olddata -D /bitnami/postgresql/data
+/opt/bitnami/scripts/postgresql/entrypoint.sh pg_upgrade  -b /bitnami/postgresql/oldbin -B /opt/bitnami/postgresql/bin -d /bitnami/postgresql/olddata -D /bitnami/postgresql/data -c
 
-mv postmaster.pid notpostmaster.pid
+mv postmaster.pid not postmaster.pid
 /opt/bitnami/postgresql/tmp/postgresql.pid
 
 # Delete pg_hba.conf and postgresql.conf so the container versions are used on reboot
