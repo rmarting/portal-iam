@@ -3,8 +3,7 @@ minikube start
 minikube addons enable ingress
 helm dependency update
 helm install centralidp -f ../../consortia/environments/centralidp/values-local.yaml .
-helm install sharedidp -f ../../consortia/environments/sharedidp/values-local.yaml .
-helm install portal -f ../../consortia/environments/values-local.yaml .
+helm upgrade centralidp -f ../../consortia/environments/centralidp/values-local.yaml .
 
 minikube ip
 kubectl get ing
